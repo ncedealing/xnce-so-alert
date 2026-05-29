@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MT5 Risk Monitor - Amazon Linux 生产部署流程</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d10;
+      --panel: #15181d;
+      --line: #2a2f38;
+      --text: #f4f6f8;
+      --muted: #9aa2ad;
+      --green: #20d49b;
+      --amber: #f5b942;
+      --red: #ff5b62;
+      --code: #07090b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    header {
+      padding: 42px 24px 28px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #15181d 0%, #0b0d10 100%);
+    }
+    main { max-width: 1080px; margin: 0 auto; padding: 28px 24px 64px; }
+    h1 { margin: 0; font-size: 32px; letter-spacing: .02em; }
+    h2 { margin: 36px 0 12px; font-size: 22px; }
+    h3 { margin: 24px 0 10px; font-size: 17px; }
+    p { margin: 8px 0; color: var(--muted); }
+    a { color: var(--green); }
+    .wrap { max-width: 1080px; margin: 0 auto; }
+    .brand { color: var(--green); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .panel {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 18px;
+      margin: 16px 0;
+    }
+    .ok { color: var(--green); }
+    .warn { color: var(--amber); }
+    .danger { color: var(--red); }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+    }
+    pre {
+      margin: 12px 0;
+      padding: 14px 16px;
+      overflow: auto;
+      border: 1px solid #20252d;
+      background: var(--code);
+      border-radius: 8px;
+      color: #d8dee9;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background: #101318; color: #dce2ea; }
+    td { color: var(--muted); }
+    ol, ul { color: var(--muted); padding-left: 22px; }
+    li { margin: 6px 0; }
+    .small { font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="brand">MT5 Risk Monitor PRO</div>
+      <h1>Amazon Linux 生产环境部署流程</h1>
+      <p>目标：用同一个生产 zip 包完成首次部署和后续系统更新。Node.js 不打包进应用，由安装脚本在线安装 Node.js 20 LTS。</p>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>推荐方案</h2>
+      <p><strong class="ok">最推荐：</strong>GitHub Release 上传生产 zip 包，Amazon Linux 服务器通过一键脚本下载并安装。</p>
+      <p>原因：服务器不需要前端构建环境，不需要拉取完整源码，不会上传 <code>config.local.json</code>、<code>.env</code>、登录用户、MT5 密码等本地数据。</p>
+      <table>
+        <tr><th>方式</th><th>适合场景</th><th>建议</th></tr>
+        <tr><td>GitHub Release zip</td><td>生产部署、升级、回滚</td><td class="ok">推荐</td></tr>
+        <tr><td>Git clone 源码</td><td>开发机或 CI 构建</td><td>可以，但服务器需要更多工具和构建步骤</td></tr>
+        <tr><td>手动 SCP zip</td><td>无 GitHub 或内网机器</td><td>可用，执行包内安装脚本即可</td></tr>
+      </table>
+    </section>
+
+    <h2>一、本地生成生产部署包</h2>
+    <p>在 Mac 本地项目目录运行：</p>
+    <pre>cd "/Users/leo/Documents/爆仓提醒"
+chmod +x scripts/make_production_package.sh scripts/install_amazon_linux.sh
+scripts/make_production_package.sh</pre>
+    <p>生成结果：</p>
+    <pre>dist/mt5-risk-monitor-production.zip
+dist/mt5-risk-monitor-&lt;version&gt;-&lt;timestamp&gt;.zip</pre>
+    <p><code>mt5-risk-monitor-production.zip</code> 是固定文件名，适合 GitHub Release 的 latest download URL。</p>
+
+    <h2>二、上传到 GitHub</h2>
+    <h3>方式 A：GitHub 网页上传 Release</h3>
+    <ol>
+      <li>创建一个 <strong>Private</strong> GitHub 仓库，例如 <code>OWNER/mt5-risk-monitor</code>。</li>
+      <li>把源码推到仓库，至少需要包含 <code>scripts/install_amazon_linux.sh</code>。</li>
+      <li>进入 GitHub 仓库的 <strong>Releases</strong>，创建新版本，例如 <code>v0.1.0</code>。</li>
+      <li>上传 <code>dist/mt5-risk-monitor-production.zip</code> 到 Release assets。</li>
+    </ol>
+
+    <h3>方式 B：命令行上传 Release</h3>
+    <p>本地安装 GitHub CLI 后：</p>
+    <pre>gh auth login
+gh repo create OWNER/mt5-risk-monitor --private --source . --remote origin --push
+gh release create v0.1.0 dist/mt5-risk-monitor-production.zip \
+  --repo OWNER/mt5-risk-monitor \
+  --title "MT5 Risk Monitor v0.1.0" \
+  --notes "Production deployment package"</pre>
+
+    <h2>三、Amazon Linux 一键安装</h2>
+    <p>登录 EC2：</p>
+    <pre>ssh -i your-key.pem ec2-user@你的服务器IP</pre>
+
+    <h3>公开仓库或公开 Release</h3>
+    <pre>curl -fsSL https://raw.githubusercontent.com/OWNER/mt5-risk-monitor/main/scripts/install_amazon_linux.sh \
+  | sudo bash -s -- --github-repo OWNER/mt5-risk-monitor</pre>
+
+    <h3>私有仓库或私有 Release</h3>
+    <p>创建 GitHub fine-grained token，只给这个仓库的 Contents/Metadata 读取权限，然后：</p>
+    <pre>export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
+curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" \
+  https://raw.githubusercontent.com/OWNER/mt5-risk-monitor/main/scripts/install_amazon_linux.sh \
+  -o /tmp/install_mt5_risk_monitor.sh
+sudo -E bash /tmp/install_mt5_risk_monitor.sh --github-repo OWNER/mt5-risk-monitor</pre>
+
+    <p>如果你已经拿到了 zip 的直接下载地址，也可以：</p>
+    <pre>sudo bash /tmp/install_mt5_risk_monitor.sh \
+  --package-url "https://github.com/OWNER/mt5-risk-monitor/releases/latest/download/mt5-risk-monitor-production.zip"</pre>
+
+    <h2>四、安装脚本会自动完成什么</h2>
+    <ul>
+      <li>在线安装 Node.js 20 LTS。</li>
+      <li>安装 <code>curl</code>、<code>unzip</code>、<code>tar</code> 等基础工具。</li>
+      <li>创建 Linux 服务用户 <code>mt5risk</code>。</li>
+      <li>部署应用到 <code>/opt/mt5-risk-monitor</code>。</li>
+      <li>首次部署时复制默认配置为 <code>config.local.json</code>。</li>
+      <li>首次部署时生成随机管理员账号和强密码，密码只显示一次。</li>
+      <li>创建并启动 systemd 服务 <code>mt5-risk-monitor</code>。</li>
+      <li>如果填写域名，安装 Nginx 并反向代理到本地应用端口。</li>
+    </ul>
+
+    <h2>五、部署过程中的交互项</h2>
+    <p>脚本会按“下一步”方式询问：</p>
+    <table>
+      <tr><th>项目</th><th>默认值</th><th>说明</th></tr>
+      <tr><td>安装目录</td><td><code>/opt/mt5-risk-monitor</code></td><td>保存应用和配置。</td></tr>
+      <tr><td>服务名</td><td><code>mt5-risk-monitor</code></td><td>systemd 服务名。</td></tr>
+      <tr><td>服务用户</td><td><code>mt5risk</code></td><td>低权限运行用户。</td></tr>
+      <tr><td>端口</td><td><code>2001</code></td><td>直接用 IP 访问时打开这个端口。</td></tr>
+      <tr><td>域名</td><td>空</td><td>填写后自动配置 Nginx 80 端口反代。</td></tr>
+    </table>
+
+    <h2>六、访问方式</h2>
+    <h3>IP + 端口</h3>
+    <pre>http://服务器IP:2001</pre>
+    <p>需要在 EC2 Security Group 放行 TCP 2001，只建议放行你的固定 IP。</p>
+
+    <h3>域名 / Cloudflare</h3>
+    <p>安装时填写域名后，访问：</p>
+    <pre>http://你的域名</pre>
+    <p>Cloudflare 常规代理不支持任意 2001 端口，因此域名模式建议使用 Nginx 监听 80/443，再反代到本地 2001。Cloudflare DNS 记录指向 EC2 公网 IP 并开启 Proxied。</p>
+
+    <h2>七、常用运维命令</h2>
+    <pre>sudo systemctl status mt5-risk-monitor
+sudo systemctl restart mt5-risk-monitor
+sudo journalctl -u mt5-risk-monitor -f
+sudo cat /opt/mt5-risk-monitor/config.local.json</pre>
+
+    <h2>八、升级流程</h2>
+    <ol>
+      <li>本地运行 <code>scripts/make_production_package.sh</code> 生成新的 zip。</li>
+      <li>上传 zip 到 GitHub Release，覆盖或新建 Release asset。</li>
+      <li>服务器再次执行同一个安装命令。</li>
+    </ol>
+    <p class="warn">升级不会覆盖 <code>config.local.json</code>、<code>.env</code>、<code>.env.local</code>、<code>.state</code> 和已有登录用户。</p>
+
+    <h2>九、安全注意事项</h2>
+    <ul>
+      <li>GitHub 仓库建议设为 Private。</li>
+      <li>不要提交 <code>config.local.json</code>、<code>.env</code>、MT5 密码、Telegram Token。</li>
+      <li>首次生成的管理员密码只显示一次，立即保存到密码管理器。</li>
+      <li>公网访问建议使用 Cloudflare、Nginx HTTPS 或仅开放可信 IP。</li>
+      <li>EC2 Security Group 不要对全网开放 MT5 服务器端口，只需要本系统能访问 MT5 入口。</li>
+    </ul>
+  </main>
+</body>
+</html>

@@ -224,8 +224,8 @@ download_package() {
   fi
 
   local package_path="$work_dir/package.zip"
-  echo "Downloading package:"
-  echo "  $PACKAGE_URL"
+  echo "Downloading package:" >&2
+  echo "  $PACKAGE_URL" >&2
   if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "$GITHUB_REPO" ]; then
     download_github_release_asset "$package_path"
   elif [ -n "${GITHUB_TOKEN:-}" ]; then
